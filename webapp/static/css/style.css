@@ -211,11 +211,32 @@ select {
   background: #fff5ea;
   padding: 16px;
   min-height: 200px;
+  position: relative;
 }
 
 .chart svg {
   width: 100%;
   height: 240px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(44, 42, 40, 0.92);
+  color: #fff5ea;
+  font-size: 0.75rem;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px -10px rgba(44, 42, 40, 0.6);
+}
+
+.chart-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(-8px);
 }
 
 .modal {

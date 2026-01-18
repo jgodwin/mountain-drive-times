@@ -387,18 +387,32 @@ function renderDayDetail(dateKey, data) {
   const points = data.map((entry, index) => {
     const date = new Date(entry.observed_at);
     const hour = date.getHours();
-    return { hour, value: entry.duration_seconds / 60, index };
+    const minute = date.getMinutes();
+    return {
+      hour,
+      value: entry.duration_seconds / 60,
+      seconds: entry.duration_seconds,
+      timeLabel: `${pad(hour)}:${pad(minute)}`,
+      index,
+    };
   });
 
   const xScale = (hour) =>
     padding + (hour / 23) * (width - padding * 2);
   const minMinutes = Math.min(...durationsMinutes);
   const maxMinutes = Math.max(...durationsMinutes);
+  const domainMin = 30;
+  const domainMax = 180;
   const yScale = (value) =>
     height -
     padding -
-    ((value - minMinutes) / (maxMinutes - minMinutes || 1)) *
+    ((value - domainMin) / (domainMax - domainMin || 1)) *
       (height - padding * 2);
+  const formatTick = (value) => `${Math.round(value)}`;
+  const formatMinutesValue = (value) => {
+    const rounded = Math.round(value * 10) / 10;
+    return rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1);
+  };
 
   const makeText = (text, x, y, rotation = 0, anchor = "middle") => {
     const label = document.createElementNS(svg.namespaceURI, "text");
@@ -443,6 +457,14 @@ function renderDayDetail(dateKey, data) {
   hourTicks.forEach((hour) => {
     const tick = document.createElementNS(svg.namespaceURI, "line");
     const x = padding + (hour / 24) * (width - padding * 2);
+    const grid = document.createElementNS(svg.namespaceURI, "line");
+    grid.setAttribute("x1", x);
+    grid.setAttribute("x2", x);
+    grid.setAttribute("y1", padding);
+    grid.setAttribute("y2", height - padding);
+    grid.setAttribute("stroke", "#eadfd4");
+    grid.setAttribute("stroke-width", "1");
+    svg.appendChild(grid);
     tick.setAttribute("x1", x);
     tick.setAttribute("x2", x);
     tick.setAttribute("y1", height - padding);
@@ -452,11 +474,18 @@ function renderDayDetail(dateKey, data) {
     svg.appendChild(makeText(`${hour}`, x, height - padding + 18, 0, "middle"));
   });
 
-  const tickCount = 4;
+  const tickCount = 5;
   for (let i = 0; i <= tickCount; i += 1) {
-    const value = minMinutes + ((maxMinutes - minMinutes) / tickCount) * i;
-    const rounded = Math.round(value / 5) * 5;
+    const value = domainMin + ((domainMax - domainMin) / tickCount) * i;
     const y = yScale(value);
+    const grid = document.createElementNS(svg.namespaceURI, "line");
+    grid.setAttribute("x1", padding);
+    grid.setAttribute("x2", width - padding);
+    grid.setAttribute("y1", y);
+    grid.setAttribute("y2", y);
+    grid.setAttribute("stroke", "#eadfd4");
+    grid.setAttribute("stroke-width", "1");
+    svg.appendChild(grid);
     const tick = document.createElementNS(svg.namespaceURI, "line");
     tick.setAttribute("x1", padding - 6);
     tick.setAttribute("x2", padding);
@@ -464,8 +493,19 @@ function renderDayDetail(dateKey, data) {
     tick.setAttribute("y2", y);
     tick.setAttribute("stroke", "#c9b8aa");
     svg.appendChild(tick);
-    svg.appendChild(makeText(`${rounded}`, padding - 10, y + 4, 0, "end"));
+    svg.appendChild(makeText(formatTick(value), padding - 10, y + 4, 0, "end"));
   }
+
+  const tooltip = document.createElement("div");
+  tooltip.classList.add("chart-tooltip");
+  tooltip.setAttribute("aria-hidden", "true");
+  const positionTooltip = (event) => {
+    const bounds = chartContainer.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    tooltip.style.left = `${x + 12}px`;
+    tooltip.style.top = `${y - 12}px`;
+  };
 
   points.forEach((point) => {
     const dot = document.createElementNS(svg.namespaceURI, "circle");
@@ -474,10 +514,23 @@ function renderDayDetail(dateKey, data) {
     dot.setAttribute("r", "4");
     dot.setAttribute("fill", "#2c2a28");
     dot.setAttribute("opacity", "0.8");
+    dot.style.cursor = "pointer";
+    dot.addEventListener("mouseenter", (event) => {
+      tooltip.textContent = `${point.timeLabel} • ${formatMinutesValue(point.value)} min (${formatDuration(point.seconds)})`;
+      tooltip.classList.add("is-visible");
+      tooltip.setAttribute("aria-hidden", "false");
+      positionTooltip(event);
+    });
+    dot.addEventListener("mousemove", positionTooltip);
+    dot.addEventListener("mouseleave", () => {
+      tooltip.classList.remove("is-visible");
+      tooltip.setAttribute("aria-hidden", "true");
+    });
     svg.appendChild(dot);
   });
 
   chartContainer.appendChild(svg);
+  chartContainer.appendChild(tooltip);
   detailMeta.textContent = `${data.length} readings, ${formatDuration(min)} - ${formatDuration(max)}`;
 }
 
