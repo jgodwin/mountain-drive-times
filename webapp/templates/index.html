@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mountain Drive Times</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Golden, CO travel times</p>
+        <h1>Mountain Drive Times</h1>
+        <p class="subhead">
+          Hourly snapshots of drive time from Golden to your favorite ski towns.
+        </p>
+      </div>
+      <div class="controls">
+        <label>
+          Destination
+          <select id="destination-select">
+            {% for destination in destinations %}
+              <option value="{{ destination }}">{{ destination }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Year
+          <select id="year-select"></select>
+        </label>
+      </div>
+    </header>
+
+    <section class="calendar-section">
+      <div class="calendar-wrap">
+        <div id="calendar" class="calendar"></div>
+        <aside class="legend">
+          <div class="legend-title">Max daily drive time</div>
+          <div class="legend-bar" id="legend-bar"></div>
+          <div class="legend-labels">
+            <span id="legend-min">1h</span>
+            <span id="legend-max">3h</span>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <div class="modal" id="detail-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-panel" role="dialog" aria-modal="true">
+        <button class="modal-close" type="button" data-modal-close aria-label="Close">×</button>
+        <div class="detail-header">
+          <div>
+            <h2 id="detail-title">Select a day</h2>
+            <p id="detail-subtitle">Click a calendar tile to see hourly drive times.</p>
+          </div>
+          <div class="detail-meta" id="detail-meta"></div>
+        </div>
+        <div class="chart" id="detail-chart"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
