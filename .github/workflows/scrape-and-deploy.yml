@@ -1,0 +1,63 @@
+name: scrape-and-deploy
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+      MAPS_SCRAPER_DB: ./data/travel_times.sqlite
+      MAPS_SCRAPER_ORIGIN: ${{ secrets.MAPS_SCRAPER_ORIGIN }}
+      MAPS_SCRAPER_DESTINATIONS: ${{ secrets.MAPS_SCRAPER_DESTINATIONS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Scrape once
+        run: python scripts/scrape.py --once
+
+      - name: Build static site
+        run: python scripts/build_static_site.py --clean --out webapp/static_site
+
+      - name: Commit database updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/travel_times.sqlite
+          if git diff --cached --quiet; then
+            echo "No DB changes to commit."
+          else
+            git commit -m "Update travel times"
+            git push
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: webapp/static_site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

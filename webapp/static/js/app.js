@@ -25,8 +25,9 @@ const legendMin = document.getElementById("legend-min");
 const legendMax = document.getElementById("legend-max");
 const detailModal = document.getElementById("detail-modal");
 const modalClosers = detailModal.querySelectorAll("[data-modal-close]");
-const dataSource = document.body.dataset.dataSource || "api";
-const dataBase = document.body.dataset.dataBase || "";
+const bodyDataset = document.body ? document.body.dataset : {};
+const dataSource = bodyDataset.dataSource || bodyDataset.source || "api";
+const dataBase = bodyDataset.dataBase || bodyDataset.base || "";
 
 let activeDayTile = null;
 let calendarData = {};
@@ -43,11 +44,15 @@ function withDataBase(path) {
 }
 
 async function fetchJson(path) {
-  const response = await fetch(path);
-  if (!response.ok) {
+  try {
+    const response = await fetch(path);
+    if (!response.ok && response.status !== 0) {
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
     return null;
   }
-  return response.json();
 }
 
 async function loadIndexData() {

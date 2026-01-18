@@ -39,7 +39,7 @@ def export_index(conn: sqlite3.Connection) -> tuple[list[dict], list[int]]:
     years = [
         int(row["year"])
         for row in conn.execute(
-            "SELECT DISTINCT substr(observed_at, 1, 4) AS year FROM travel_times ORDER BY year"
+            "SELECT DISTINCT strftime('%Y', datetime(observed_at, '-7 hours')) AS year FROM travel_times ORDER BY year"
         ).fetchall()
         if row["year"]
     ]
@@ -59,11 +59,11 @@ def export_calendar(
 ) -> dict:
     rows = conn.execute(
         """
-        SELECT substr(observed_at, 1, 10) AS day,
+        SELECT date(datetime(observed_at, '-7 hours')) AS day,
                MAX(duration_seconds) AS max_duration
         FROM travel_times
         WHERE destination = ?
-          AND substr(observed_at, 1, 4) = ?
+          AND strftime('%Y', datetime(observed_at, '-7 hours')) = ?
         GROUP BY day
         ORDER BY day
         """,
@@ -77,7 +77,9 @@ def export_day_details(
 ) -> dict[str, list[dict]]:
     rows = conn.execute(
         """
-        SELECT observed_at, duration_seconds
+        SELECT date(datetime(observed_at, '-7 hours')) AS day,
+               strftime('%Y-%m-%dT%H:%M:%S', datetime(observed_at, '-7 hours')) || '-07:00' AS observed_at,
+               duration_seconds
         FROM travel_times
         WHERE destination = ?
         ORDER BY observed_at
@@ -86,7 +88,7 @@ def export_day_details(
     ).fetchall()
     data: dict[str, list[dict]] = {}
     for row in rows:
-        day = row["observed_at"][:10]
+        day = row["day"]
         data.setdefault(day, []).append(
             {
                 "observed_at": row["observed_at"],

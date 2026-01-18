@@ -41,11 +41,11 @@ def create_app() -> Flask:
         try:
             rows = conn.execute(
                 """
-                SELECT substr(observed_at, 1, 10) AS day,
+                SELECT date(datetime(observed_at, '-7 hours')) AS day,
                        MAX(duration_seconds) AS max_duration
                 FROM travel_times
                 WHERE destination = ?
-                  AND substr(observed_at, 1, 4) = ?
+                  AND strftime('%Y', datetime(observed_at, '-7 hours')) = ?
                 GROUP BY day
                 ORDER BY day
                 """,
@@ -68,10 +68,11 @@ def create_app() -> Flask:
         try:
             rows = conn.execute(
                 """
-                SELECT observed_at, duration_seconds
+                SELECT strftime('%Y-%m-%dT%H:%M:%S', datetime(observed_at, '-7 hours')) || '-07:00' AS observed_at,
+                       duration_seconds
                 FROM travel_times
                 WHERE destination = ?
-                  AND substr(observed_at, 1, 10) = ?
+                  AND date(datetime(observed_at, '-7 hours')) = ?
                 ORDER BY observed_at
                 """,
                 (destination, date),
@@ -93,7 +94,7 @@ def create_app() -> Flask:
         conn = connect()
         try:
             rows = conn.execute(
-                "SELECT DISTINCT substr(observed_at, 1, 4) AS year FROM travel_times ORDER BY year"
+                "SELECT DISTINCT strftime('%Y', datetime(observed_at, '-7 hours')) AS year FROM travel_times ORDER BY year"
             ).fetchall()
         finally:
             conn.close()
