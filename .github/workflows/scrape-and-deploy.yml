@@ -22,6 +22,7 @@ jobs:
       MAPS_SCRAPER_DB: ./data/travel_times.sqlite
       MAPS_SCRAPER_ORIGIN: ${{ secrets.MAPS_SCRAPER_ORIGIN }}
       MAPS_SCRAPER_DESTINATIONS: ${{ secrets.MAPS_SCRAPER_DESTINATIONS }}
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
