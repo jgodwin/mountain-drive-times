@@ -15,6 +15,7 @@ const monthNames = [
 
 const weekdayLabels = ["M", "T", "W", "T", "F", "S", "S"];
 const calendarEl = document.getElementById("calendar");
+const directionSelect = document.getElementById("direction-select");
 const destinationSelect = document.getElementById("destination-select");
 const yearSelect = document.getElementById("year-select");
 const detailTitle = document.getElementById("detail-title");
@@ -33,6 +34,7 @@ let activeDayTile = null;
 let calendarData = {};
 let indexData = null;
 let destinationLookup = {};
+let directionLookup = {};
 
 function withDataBase(path) {
   if (!dataBase) {
@@ -63,12 +65,36 @@ async function loadIndexData() {
     return indexData;
   }
   const payload = await fetchJson(withDataBase("index.json"));
-  indexData = payload || { destinations: [], years: [] };
+  indexData = payload || { destinations: [], years: [], directions: [] };
   destinationLookup = {};
   (indexData.destinations || []).forEach((entry) => {
     destinationLookup[entry.id] = entry.label;
   });
+  directionLookup = {};
+  (indexData.directions || []).forEach((entry) => {
+    directionLookup[entry.id] = entry.label;
+  });
   return indexData;
+}
+
+const defaultDirections = [
+  { id: "westbound", label: "Westbound" },
+  { id: "eastbound", label: "Eastbound" },
+];
+
+function currentDirection() {
+  if (!directionSelect) {
+    return "westbound";
+  }
+  return directionSelect.value || "westbound";
+}
+
+function currentDirectionLabel() {
+  if (!directionSelect) {
+    return "Westbound";
+  }
+  const selected = directionSelect.options[directionSelect.selectedIndex];
+  return selected ? selected.textContent : directionSelect.value;
 }
 
 function range(start, end) {
@@ -139,13 +165,39 @@ async function buildDestinationOptions() {
   });
 }
 
+async function buildDirectionOptions() {
+  if (!directionSelect) {
+    return;
+  }
+  let directions = defaultDirections;
+  if (dataSource === "static") {
+    const payload = await loadIndexData();
+    if (payload.directions && payload.directions.length) {
+      directions = payload.directions;
+    }
+  }
+  directionSelect.innerHTML = "";
+  directions.forEach((direction, idx) => {
+    const option = document.createElement("option");
+    option.value = direction.id;
+    option.textContent = direction.label;
+    if (idx === 0) {
+      option.selected = true;
+    }
+    directionSelect.appendChild(option);
+  });
+}
+
 async function buildYearOptions() {
   let years = [];
   if (dataSource === "static") {
     const payload = await loadIndexData();
     years = payload.years || [];
   } else {
-    const response = await fetch("/api/years");
+    const direction = currentDirection();
+    const response = await fetch(
+      `/api/years?direction=${encodeURIComponent(direction)}`
+    );
     const payload = await response.json();
     years = payload.years || [];
   }
@@ -241,6 +293,7 @@ function applyCalendarColors() {
 }
 
 async function fetchCalendar() {
+  const direction = currentDirection();
   const destination = destinationSelect.value;
   const year = yearSelect.value;
   if (!destination || !year) {
@@ -251,11 +304,13 @@ async function fetchCalendar() {
   let payload = null;
   if (dataSource === "static") {
     payload = await fetchJson(
-      withDataBase(`calendar/${encodeURIComponent(destination)}/${year}.json`)
+      withDataBase(
+        `calendar/${encodeURIComponent(direction)}/${encodeURIComponent(destination)}/${year}.json`
+      )
     );
   } else {
     const response = await fetch(
-      `/api/calendar?destination=${encodeURIComponent(destination)}&year=${encodeURIComponent(year)}`
+      `/api/calendar?destination=${encodeURIComponent(destination)}&year=${encodeURIComponent(year)}&direction=${encodeURIComponent(direction)}`
     );
     payload = await response.json();
   }
@@ -284,6 +339,7 @@ function selectDay(tile, dateKey) {
 }
 
 async function fetchDayDetail(dateKey) {
+  const direction = currentDirection();
   const destination = destinationSelect.value;
   if (!destination) {
     renderDayDetail(dateKey, []);
@@ -292,11 +348,13 @@ async function fetchDayDetail(dateKey) {
   let payload = null;
   if (dataSource === "static") {
     payload = await fetchJson(
-      withDataBase(`day/${encodeURIComponent(destination)}/${dateKey}.json`)
+      withDataBase(
+        `day/${encodeURIComponent(direction)}/${encodeURIComponent(destination)}/${dateKey}.json`
+      )
     );
   } else {
     const response = await fetch(
-      `/api/day?destination=${encodeURIComponent(destination)}&date=${encodeURIComponent(dateKey)}`
+      `/api/day?destination=${encodeURIComponent(destination)}&date=${encodeURIComponent(dateKey)}&direction=${encodeURIComponent(direction)}`
     );
     payload = await response.json();
   }
@@ -306,7 +364,7 @@ async function fetchDayDetail(dateKey) {
 function renderDayDetail(dateKey, data) {
   detailTitle.textContent = `${dateKey}`;
   detailSubtitle.textContent = data.length
-    ? `Hourly observations for ${currentDestinationLabel()}`
+    ? `Hourly observations for ${currentDestinationLabel()} (${currentDirectionLabel()})`
     : "No data recorded for this day.";
 
   detailMeta.textContent = `${data.length} readings`;
@@ -429,6 +487,14 @@ function setupControls() {
     fetchCalendar();
   });
 
+  if (directionSelect) {
+    directionSelect.addEventListener("change", async () => {
+      await buildYearOptions();
+      buildCalendar(parseInt(yearSelect.value, 10));
+      fetchCalendar();
+    });
+  }
+
   destinationSelect.addEventListener("change", () => {
     fetchCalendar();
   });
@@ -439,6 +505,7 @@ function setupControls() {
 }
 
 async function init() {
+  await buildDirectionOptions();
   await buildDestinationOptions();
   await buildYearOptions();
   buildCalendar(parseInt(yearSelect.value, 10));

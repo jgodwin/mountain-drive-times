@@ -18,6 +18,13 @@
       </div>
       <div class="controls">
         <label>
+          Direction
+          <select id="direction-select">
+            <option value="westbound" selected>Westbound</option>
+            <option value="eastbound">Eastbound</option>
+          </select>
+        </label>
+        <label>
           Destination
           <select id="destination-select">
             {% for destination in destinations %}

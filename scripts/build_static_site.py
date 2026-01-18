@@ -29,17 +29,32 @@ def slugify(label: str, used: set[str]) -> str:
     return slug
 
 
-def export_index(conn: sqlite3.Connection) -> tuple[list[dict], list[int]]:
+def export_index(
+    conn: sqlite3.Connection, origin: str
+) -> tuple[list[dict], list[int], list[dict]]:
     destinations = [
         row["destination"]
         for row in conn.execute(
-            "SELECT DISTINCT destination FROM travel_times ORDER BY destination"
+            """
+            SELECT DISTINCT destination
+            FROM travel_times
+            WHERE origin = ?
+            ORDER BY destination
+            """,
+            (origin,),
         ).fetchall()
     ]
     years = [
         int(row["year"])
         for row in conn.execute(
-            "SELECT DISTINCT strftime('%Y', datetime(observed_at, '-7 hours')) AS year FROM travel_times ORDER BY year"
+            """
+            SELECT DISTINCT strftime('%Y', datetime(observed_at, '-7 hours')) AS year
+            FROM travel_times
+            WHERE origin = ?
+               OR destination = ?
+            ORDER BY year
+            """,
+            (origin, origin),
         ).fetchall()
         if row["year"]
     ]
@@ -49,42 +64,58 @@ def export_index(conn: sqlite3.Connection) -> tuple[list[dict], list[int]]:
         {"id": slugify(destination, used_slugs), "label": destination}
         for destination in destinations
     ]
-    return dest_entries, years
+    directions = [
+        {"id": "westbound", "label": "Westbound"},
+        {"id": "eastbound", "label": "Eastbound"},
+    ]
+    return dest_entries, years, directions
+
+
+def resolve_trip(origin: str, destination: str, direction: str) -> tuple[str, str]:
+    if direction == "eastbound":
+        return destination, origin
+    return origin, destination
 
 
 def export_calendar(
     conn: sqlite3.Connection,
+    origin: str,
     destination: str,
     year: int,
+    direction: str,
 ) -> dict:
+    origin_value, destination_value = resolve_trip(origin, destination, direction)
     rows = conn.execute(
         """
         SELECT date(datetime(observed_at, '-7 hours')) AS day,
                MAX(duration_seconds) AS max_duration
         FROM travel_times
-        WHERE destination = ?
+        WHERE origin = ?
+          AND destination = ?
           AND strftime('%Y', datetime(observed_at, '-7 hours')) = ?
         GROUP BY day
         ORDER BY day
         """,
-        (destination, str(year)),
+        (origin_value, destination_value, str(year)),
     ).fetchall()
     return {row["day"]: row["max_duration"] for row in rows}
 
 
 def export_day_details(
-    conn: sqlite3.Connection, destination: str
+    conn: sqlite3.Connection, origin: str, destination: str, direction: str
 ) -> dict[str, list[dict]]:
+    origin_value, destination_value = resolve_trip(origin, destination, direction)
     rows = conn.execute(
         """
         SELECT date(datetime(observed_at, '-7 hours')) AS day,
                strftime('%Y-%m-%dT%H:%M:%S', datetime(observed_at, '-7 hours')) || '-07:00' AS observed_at,
                duration_seconds
         FROM travel_times
-        WHERE destination = ?
+        WHERE origin = ?
+          AND destination = ?
         ORDER BY observed_at
         """,
-        (destination,),
+        (origin_value, destination_value),
     ).fetchall()
     data: dict[str, list[dict]] = {}
     for row in rows:
@@ -105,6 +136,7 @@ def write_json(path: Path, payload: dict | list) -> None:
 
 
 def build_static_site(db_path: str, out_dir: Path, clean: bool) -> None:
+    origin = os.getenv("MAPS_SCRAPER_ORIGIN", "Golden, CO")
     if clean and out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -132,6 +164,10 @@ def build_static_site(db_path: str, out_dir: Path, clean: bool) -> None:
         </p>
       </div>
       <div class="controls">
+        <label>
+          Direction
+          <select id="direction-select"></select>
+        </label>
         <label>
           Destination
           <select id="destination-select"></select>
@@ -185,25 +221,40 @@ def build_static_site(db_path: str, out_dir: Path, clean: bool) -> None:
     data_root.mkdir(parents=True, exist_ok=True)
 
     with connect(db_path) as conn:
-        destinations, years = export_index(conn)
-        write_json(data_root / "index.json", {"destinations": destinations, "years": years})
+        destinations, years, directions = export_index(conn, origin)
+        write_json(
+            data_root / "index.json",
+            {"destinations": destinations, "years": years, "directions": directions},
+        )
 
-        for dest in destinations:
-            dest_id = dest["id"]
-            label = dest["label"]
-            for year in years:
-                calendar_data = export_calendar(conn, label, year)
-                write_json(
-                    data_root / "calendar" / dest_id / f"{year}.json",
-                    {"destination": label, "year": year, "data": calendar_data},
-                )
+        for direction in directions:
+            direction_id = direction["id"]
+            for dest in destinations:
+                dest_id = dest["id"]
+                label = dest["label"]
+                for year in years:
+                    calendar_data = export_calendar(conn, origin, label, year, direction_id)
+                    write_json(
+                        data_root / "calendar" / direction_id / dest_id / f"{year}.json",
+                        {
+                            "destination": label,
+                            "year": year,
+                            "direction": direction_id,
+                            "data": calendar_data,
+                        },
+                    )
 
-            day_details = export_day_details(conn, label)
-            for day, entries in day_details.items():
-                write_json(
-                    data_root / "day" / dest_id / f"{day}.json",
-                    {"destination": label, "date": day, "data": entries},
-                )
+                day_details = export_day_details(conn, origin, label, direction_id)
+                for day, entries in day_details.items():
+                    write_json(
+                        data_root / "day" / direction_id / dest_id / f"{day}.json",
+                        {
+                            "destination": label,
+                            "date": day,
+                            "direction": direction_id,
+                            "data": entries,
+                        },
+                    )
 
 
 def main() -> None:

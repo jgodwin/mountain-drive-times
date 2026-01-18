@@ -29,6 +29,12 @@ def init_db(conn: sqlite3.Connection) -> None:
         ON travel_times (destination, observed_at)
         """
     )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_travel_times_origin_dest_time
+        ON travel_times (origin, destination, observed_at)
+        """
+    )
     conn.commit()
 
 

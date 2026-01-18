@@ -78,6 +78,16 @@ def main() -> int:
                         current.isoformat(),
                     )
                 )
+                reverse_duration = build_fake_duration(randomizer, origin, current)
+                rows.append(
+                    (
+                        destination,
+                        origin,
+                        reverse_duration,
+                        None,
+                        current.isoformat(),
+                    )
+                )
             current += timedelta(hours=1)
 
         db.insert_travel_times(conn, rows)

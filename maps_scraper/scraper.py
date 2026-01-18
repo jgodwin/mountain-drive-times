@@ -80,8 +80,26 @@ def scrape_once(
     destinations: Iterable[str],
     observed_at: datetime | None = None,
 ) -> list[TravelTime]:
-    travel_times = fetch_travel_times(api_key, origin, destinations)
+    destination_list = list(destinations)
+    travel_times = fetch_travel_times(api_key, origin, destination_list)
     timestamp = (observed_at or datetime.now(timezone.utc)).isoformat()
+    reverse_times: list[TravelTime] = []
+    reverse_rows: list[tuple[str, str, int, int | None, str]] = []
+    for destination in destination_list:
+        reverse_entries = fetch_travel_times(api_key, destination, [origin])
+        if not reverse_entries:
+            continue
+        reverse_entry = reverse_entries[0]
+        reverse_times.append(reverse_entry)
+        reverse_rows.append(
+            (
+                destination,
+                reverse_entry.destination,
+                reverse_entry.duration_seconds,
+                reverse_entry.distance_meters,
+                timestamp,
+            )
+        )
 
     conn = db.connect(db_path)
     try:
@@ -93,10 +111,12 @@ def scrape_once(
                 for entry in travel_times
             ],
         )
+        if reverse_rows:
+            db.insert_travel_times(conn, reverse_rows)
     finally:
         conn.close()
 
-    return travel_times
+    return travel_times + reverse_times
 
 
 def run_forever(
